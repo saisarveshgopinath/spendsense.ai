@@ -3,10 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
 import io
 
-# Import your modules
+# Import your existing backend modules
 from ml_model import audit_transactions
-from normalize import clean_upi_description # If Dhurshan created a cleaning function
-from rag_chatbot import query_statement       # If Dhurshan created a query function
+from normalize import clean_transaction  # <--- Updated function import name!
 
 app = FastAPI(title="SpendSense AI API")
 
@@ -25,15 +24,20 @@ def home():
 
 @app.post("/api/upload")
 async def process_statement(file: UploadFile = File(...)):
-    # Read uploaded CSV / file into memory
+    # Read uploaded CSV file
     contents = await file.read()
     df = pd.read_csv(io.BytesIO(contents))
     
-    # Save temporary file for ML audit
+    # Save temporary CSV for processing
     temp_path = "data/uploaded_statement.csv"
     df.to_csv(temp_path, index=False)
     
-    # Run your ML Anomaly Engine
+    # 1. Run Regex Normalization on Description column using normalize.py
+    if 'Description' in df.columns:
+        df['Clean_Merchant'] = df['Description'].apply(lambda x: clean_transaction(str(x))['merchant'])
+        df['Category'] = df['Description'].apply(lambda x: clean_transaction(str(x))['category'])
+    
+    # 2. Run ML Anomaly Detection Engine
     audit_results = audit_transactions(temp_path)
     
     return {
